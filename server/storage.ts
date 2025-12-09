@@ -1,17 +1,17 @@
 import { type Plan, type InsertPlan, type UpdatePlan, type User, type InsertUser, plans, users } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
-  getAllPlans(): Promise<Plan[]>;
-  getPlan(id: string): Promise<Plan | undefined>;
-  createPlan(plan: InsertPlan): Promise<Plan>;
-  updatePlan(id: string, plan: UpdatePlan): Promise<Plan | undefined>;
-  deletePlan(id: string): Promise<boolean>;
+  getAllPlans(userId: string): Promise<Plan[]>;
+  getPlan(id: string, userId: string): Promise<Plan | undefined>;
+  createPlan(plan: InsertPlan, userId: string): Promise<Plan>;
+  updatePlan(id: string, plan: UpdatePlan, userId: string): Promise<Plan | undefined>;
+  deletePlan(id: string, userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -30,17 +30,18 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getAllPlans(): Promise<Plan[]> {
-    return await db.select().from(plans).orderBy(desc(plans.createdAt));
+  async getAllPlans(userId: string): Promise<Plan[]> {
+    return await db.select().from(plans).where(eq(plans.userId, userId)).orderBy(desc(plans.createdAt));
   }
 
-  async getPlan(id: string): Promise<Plan | undefined> {
-    const result = await db.select().from(plans).where(eq(plans.id, id));
+  async getPlan(id: string, userId: string): Promise<Plan | undefined> {
+    const result = await db.select().from(plans).where(and(eq(plans.id, id), eq(plans.userId, userId)));
     return result[0];
   }
 
-  async createPlan(insertPlan: InsertPlan): Promise<Plan> {
+  async createPlan(insertPlan: InsertPlan, userId: string): Promise<Plan> {
     const result = await db.insert(plans).values({
+      userId,
       title: insertPlan.title,
       description: insertPlan.description || null,
       priority: insertPlan.priority || "medium",
@@ -51,16 +52,16 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updatePlan(id: string, updateData: UpdatePlan): Promise<Plan | undefined> {
+  async updatePlan(id: string, updateData: UpdatePlan, userId: string): Promise<Plan | undefined> {
     const result = await db.update(plans)
       .set(updateData)
-      .where(eq(plans.id, id))
+      .where(and(eq(plans.id, id), eq(plans.userId, userId)))
       .returning();
     return result[0];
   }
 
-  async deletePlan(id: string): Promise<boolean> {
-    const result = await db.delete(plans).where(eq(plans.id, id)).returning();
+  async deletePlan(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(plans).where(and(eq(plans.id, id), eq(plans.userId, userId))).returning();
     return result.length > 0;
   }
 }

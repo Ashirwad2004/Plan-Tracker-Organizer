@@ -14,6 +14,7 @@ export type Status = (typeof statuses)[number];
 
 export const plans = pgTable("plans", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
   priority: text("priority").$type<Priority>().notNull().default("medium"),
@@ -25,6 +26,7 @@ export const plans = pgTable("plans", {
 
 export const insertPlanSchema = createInsertSchema(plans).omit({
   id: true,
+  userId: true,
   createdAt: true,
 });
 
