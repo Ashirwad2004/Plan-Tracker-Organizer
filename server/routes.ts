@@ -2,23 +2,31 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertPlanSchema, updatePlanSchema } from "@shared/schema";
+import { register, login, logout, getCurrentUser, requireAuth } from "./auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  app.get("/api/plans", async (req, res) => {
+  // Authentication routes
+  app.post("/api/auth/register", register);
+  app.post("/api/auth/login", login);
+  app.post("/api/auth/logout", logout);
+  app.get("/api/auth/me", getCurrentUser);
+
+  // Protected plan routes
+  app.get("/api/plans", requireAuth, async (req, res) => {
     try {
-      const plans = await storage.getAllPlans();
+      const plans = await storage.getAllPlans(req.userId!);
       res.json(plans);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch plans" });
     }
   });
 
-  app.get("/api/plans/:id", async (req, res) => {
+  app.get("/api/plans/:id", requireAuth, async (req, res) => {
     try {
-      const plan = await storage.getPlan(req.params.id);
+      const plan = await storage.getPlan(req.params.id, req.userId!);
       if (!plan) {
         return res.status(404).json({ error: "Plan not found" });
       }
@@ -28,26 +36,26 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/plans", async (req, res) => {
+  app.post("/api/plans", requireAuth, async (req, res) => {
     try {
       const parsed = insertPlanSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid plan data", details: parsed.error.errors });
       }
-      const plan = await storage.createPlan(parsed.data);
+      const plan = await storage.createPlan(parsed.data, req.userId!);
       res.status(201).json(plan);
     } catch (error) {
       res.status(500).json({ error: "Failed to create plan" });
     }
   });
 
-  app.patch("/api/plans/:id", async (req, res) => {
+  app.patch("/api/plans/:id", requireAuth, async (req, res) => {
     try {
       const parsed = updatePlanSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid plan data", details: parsed.error.errors });
       }
-      const plan = await storage.updatePlan(req.params.id, parsed.data);
+      const plan = await storage.updatePlan(req.params.id, parsed.data, req.userId!);
       if (!plan) {
         return res.status(404).json({ error: "Plan not found" });
       }
@@ -57,9 +65,9 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/plans/:id", async (req, res) => {
+  app.delete("/api/plans/:id", requireAuth, async (req, res) => {
     try {
-      const deleted = await storage.deletePlan(req.params.id);
+      const deleted = await storage.deletePlan(req.params.id, req.userId!);
       if (!deleted) {
         return res.status(404).json({ error: "Plan not found" });
       }
