@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles, Wand2, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatePresence } from "framer-motion";
@@ -14,6 +14,8 @@ import { DeleteDialog } from "@/components/delete-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { ProgressBar } from "@/components/progress-bar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import type { Plan, InsertPlan } from "@shared/schema";
 import { filterPlans, getStats } from "@/lib/utils";
 
@@ -32,6 +34,12 @@ export default function Dashboard() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+  const [plannerPrompt, setPlannerPrompt] = useState("");
+  const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
+  const [aiPrioritized, setAiPrioritized] = useState<
+    { id?: string; title?: string; priority?: string; reason?: string }[]
+  >([]);
+  const [aiDailyPlan, setAiDailyPlan] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveFilter(urlFilter);
@@ -105,6 +113,69 @@ export default function Dashboard() {
       toast({
         title: "Error",
         description: "Failed to delete task. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const aiSuggestMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ai/suggest");
+      return res.json() as Promise<{ suggestions: string }>;
+    },
+    onSuccess: (data) => {
+      setAiSuggestions(data.suggestions);
+      toast({
+        title: "AI suggestions ready",
+        description: "Review the recommendations below.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "AI error",
+        description: error.message || "Failed to get suggestions.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const aiSortMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ai/sort");
+      return res.json() as Promise<{ prioritized: any[] }>;
+    },
+    onSuccess: (data) => {
+      setAiPrioritized(data.prioritized || []);
+      toast({
+        title: "Tasks prioritized",
+        description: "AI prioritized your tasks.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "AI error",
+        description: error.message || "Failed to prioritize tasks.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const aiPlanMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ai/plan", { prompt: plannerPrompt });
+      return res.json() as Promise<{ plan: string }>;
+    },
+    onSuccess: (data) => {
+      setAiDailyPlan(data.plan);
+      toast({
+        title: "Daily plan created",
+        description: "AI generated a schedule for you.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "AI error",
+        description: error.message || "Failed to create plan.",
         variant: "destructive",
       });
     },
@@ -203,6 +274,96 @@ export default function Dashboard() {
           label="Overall completion"
         />
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI Assistant
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => aiSuggestMutation.mutate()}
+              disabled={aiSuggestMutation.isPending}
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              {aiSuggestMutation.isPending ? "Thinking..." : "AI Suggestions"}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => aiSortMutation.mutate()}
+              disabled={aiSortMutation.isPending}
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              {aiSortMutation.isPending ? "Sorting..." : "Auto-Prioritize"}
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <CalendarClock className="h-4 w-4 text-primary" />
+              Daily planner prompt
+            </label>
+            <Textarea
+              placeholder="e.g., I have 4 hours today, need to finish report and exercise."
+              value={plannerPrompt}
+              onChange={(e) => setPlannerPrompt(e.target.value)}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => aiPlanMutation.mutate()}
+              disabled={aiPlanMutation.isPending || !plannerPrompt.trim()}
+            >
+              {aiPlanMutation.isPending ? "Creating plan..." : "Create Daily Plan"}
+            </Button>
+          </div>
+
+          {aiSuggestions && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold">AI Suggestions</h4>
+              <div className="text-sm text-muted-foreground whitespace-pre-wrap rounded border p-3 bg-muted/40">
+                {aiSuggestions}
+              </div>
+            </div>
+          )}
+
+          {aiPrioritized.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold">AI Prioritized Tasks</h4>
+              <div className="space-y-2">
+                {aiPrioritized.map((item, idx) => (
+                  <div key={`${item.id ?? idx}`} className="rounded border p-3 bg-muted/30">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{item.title ?? "Task"}</span>
+                      <span className="text-xs uppercase tracking-wide text-primary">
+                        {item.priority || "Priority"}
+                      </span>
+                    </div>
+                    {item.reason && (
+                      <p className="text-xs text-muted-foreground mt-1">{item.reason}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {aiDailyPlan && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold">AI Daily Plan</h4>
+              <div className="text-sm text-muted-foreground whitespace-pre-wrap rounded border p-3 bg-muted/40">
+                {aiDailyPlan}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <FilterBar
         activeFilter={activeFilter}
