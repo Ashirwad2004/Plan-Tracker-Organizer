@@ -1,10 +1,40 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const priorities = ["low", "medium", "high"] as const;
+export type Priority = (typeof priorities)[number];
+
+export const categories = ["work", "study", "health", "finance", "personal"] as const;
+export type Category = (typeof categories)[number];
+
+export const statuses = ["pending", "completed"] as const;
+export type Status = (typeof statuses)[number];
+
+export const plans = pgTable("plans", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  priority: text("priority").$type<Priority>().notNull().default("medium"),
+  category: text("category").$type<Category>().notNull().default("personal"),
+  status: text("status").$type<Status>().notNull().default("pending"),
+  deadline: text("deadline"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertPlanSchema = createInsertSchema(plans).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const updatePlanSchema = insertPlanSchema.partial();
+
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
+export type UpdatePlan = z.infer<typeof updatePlanSchema>;
+export type Plan = typeof plans.$inferSelect;
+
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 36 }).primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
