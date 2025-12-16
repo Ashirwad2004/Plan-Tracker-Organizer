@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertPlanSchema, updatePlanSchema } from "@shared/schema";
 import { register, login, logout, getCurrentUser, requireAuth } from "./auth";
+import { aiSuggestImprovements, aiSortTasks, aiDailyPlanner } from "./ai";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -74,6 +75,38 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete plan" });
+    }
+  });
+
+  // AI routes
+  app.post("/api/ai/suggest", requireAuth, async (req, res) => {
+    try {
+      const plans = await storage.getAllPlans(req.userId!);
+      const suggestions = await aiSuggestImprovements(plans);
+      res.json({ suggestions });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get AI suggestions" });
+    }
+  });
+
+  app.post("/api/ai/sort", requireAuth, async (req, res) => {
+    try {
+      const plans = await storage.getAllPlans(req.userId!);
+      const prioritized = await aiSortTasks(plans);
+      res.json({ prioritized });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to sort tasks" });
+    }
+  });
+
+  app.post("/api/ai/plan", requireAuth, async (req, res) => {
+    try {
+      const userPrompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
+      const plans = await storage.getAllPlans(req.userId!);
+      const plan = await aiDailyPlanner(plans, userPrompt);
+      res.json({ plan });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate daily plan" });
     }
   });
 
