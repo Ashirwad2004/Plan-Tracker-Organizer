@@ -73,78 +73,18 @@ export async function login(req: Request, res: Response) {
   try {
     const { username, password } = req.body;
 
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/156e0de5-5b0a-41a1-9f61-de7a7e561518", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "pre-fix",
-        hypothesisId: "H1",
-        location: "server/auth.ts:75",
-        message: "Login request body received",
-        data: {
-          hasBody: !!req.body,
-          bodyKeys: req.body ? Object.keys(req.body) : null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     if (!username || !password) {
       return res.status(400).json({ error: "Username and password are required" });
     }
 
     // Find user
     const user = await storage.getUserByUsername(username);
-
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/156e0de5-5b0a-41a1-9f61-de7a7e561518", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "pre-fix",
-        hypothesisId: "H2",
-        location: "server/auth.ts:83",
-        message: "Result of getUserByUsername in login",
-        data: {
-          foundUser: !!user,
-          userId: user?.id ?? null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     if (!user) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
-
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/156e0de5-5b0a-41a1-9f61-de7a7e561518", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "pre-fix",
-        hypothesisId: "H3",
-        location: "server/auth.ts:90",
-        message: "Password comparison result in login",
-        data: {
-          isValidPassword,
-          passwordType: typeof password,
-          userPasswordType: typeof user.password,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     if (!isValidPassword) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
@@ -153,31 +93,20 @@ export async function login(req: Request, res: Response) {
     req.session!.userId = user.id;
     req.session!.username = user.username;
 
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/156e0de5-5b0a-41a1-9f61-de7a7e561518", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "pre-fix",
-        hypothesisId: "H4",
-        location: "server/auth.ts:98",
-        message: "Login session set successfully",
-        data: {
-          userId: user.id,
-          username: user.username,
-          hasSession: !!req.session,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     // Return user without password
     const { password: _, ...userWithoutPassword } = user;
     res.json(userWithoutPassword);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Login error:", error);
+    
+    // Check if it's a database connection error
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes("ENOTFOUND") || errorMessage.includes("getaddrinfo") || errorMessage.includes("ECONNREFUSED") || errorMessage.includes("ETIMEDOUT") || errorMessage.includes("MongoNetworkError")) {
+      return res.status(503).json({ 
+        error: "Database connection failed. Please check your DATABASE_URL configuration and ensure MongoDB is accessible." 
+      });
+    }
+    
     res.status(500).json({ error: "Failed to login" });
   }
 }
